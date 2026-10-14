@@ -10,3 +10,11 @@ Sidebar notepad for prompts, URLs, file paths and notes, shown as cards.
 - Claude Code: the `/pad` skill uses `src/cli.js` on the same file.
 
 Tests: `npm test`.
+
+![Scratchpad sidebar](docs/screenshot.png)
+
+## Use with Claude Code (optional)
+
+Copy `claude-skill/pad` to `~/.claude/skills/pad`, replace `<path-to-this-repo>` in it with this repo's path, and Claude can add to and query the same file: "add this to the pad", "list the file paths I added yesterday".
+
+Install the extension from a built package: `npx @vscode/vsce package --no-dependencies`, then `code --install-extension scratchpad-vscode-0.2.0.vsix`.
