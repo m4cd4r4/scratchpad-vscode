@@ -17,7 +17,9 @@ test('detectKind', () => {
   assert.strictEqual(s.detectKind('~/.claude/rules/x.md'), 'path');
   assert.strictEqual(s.detectKind('C:/a/b.md\nC:/a/c.md'), 'path');
   assert.strictEqual(s.detectKind('/commit now please'), 'note');
-  assert.strictEqual(s.detectKind('Save the plan to C:/x/<slug>.md'), 'note');
+  assert.strictEqual(s.detectKind('SSF header menu alignment: https://claude.ai/artifact/GTwSsM8kJCXxdvsVp1mhR7'), 'note');
+  assert.strictEqual(s.detectKind('Save the plan to C:/x/<slug>.md'), 'prompt');
+  assert.strictEqual(s.detectKind('First line\nsecond line'), 'prompt');
 });
 
 test('add creates dirs, load returns newest first', () => {

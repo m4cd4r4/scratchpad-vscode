@@ -1,63 +1,32 @@
 'use strict';
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const vscode = require('vscode');
 const store = require('./store');
 
-const ICONS = { prompt: 'comment-discussion', url: 'link', path: 'file', note: 'note' };
-const GROUPS = { prompt: 'Prompts', url: 'URLs', path: 'File paths', note: 'Notes' };
+const URL_RE = /https?:\/\/[^\s<>"')]+/;
 
 function activate(ctx) {
   const cfg = () => vscode.workspace.getConfiguration('scratchpad');
   const getFile = () => cfg().get('file') || store.defaultFile();
-  let filter = '';
-  let watched = null;
-  const changed = new vscode.EventEmitter();
-
-  const entries = () => store.query(store.load(getFile()), { q: filter });
   const byId = (id) => store.findById(store.load(getFile()), id);
-  const idOf = (arg) => (typeof arg === 'string' ? arg : arg && arg.entryId);
+  const fwd = (p) => p.replace(/\\/g, '/');
+  const deleted = new Map();
+  let view = null;
+  let watched = null;
 
-  function refresh() {
-    const total = store.load(getFile()).length;
-    vscode.commands.executeCommand('setContext', 'scratchpad.filtered', !!filter);
-    vscode.commands.executeCommand('setContext', 'scratchpad.empty', total === 0);
-    changed.fire();
+  function push() {
+    if (!view) return;
+    const now = new Date();
+    const rows = store.load(getFile()).map((e) => ({ ...e, rel: store.relative(e.ts, now) }));
+    view.webview.postMessage({ type: 'state', entries: rows });
   }
 
   function watch() {
     if (watched) fs.unwatchFile(watched);
     watched = getFile();
-    fs.watchFile(watched, { interval: 1000 }, refresh);
-  }
-
-  const provider = {
-    onDidChangeTreeData: changed.event,
-    getTreeItem: (el) => el,
-    getChildren(el) {
-      if (el) return el.children;
-      const all = entries();
-      return store.KINDS.filter((k) => all.some((e) => e.kind === k)).map((k) => {
-        const g = new vscode.TreeItem(GROUPS[k], vscode.TreeItemCollapsibleState.Expanded);
-        g.iconPath = new vscode.ThemeIcon(ICONS[k]);
-        g.description = String(all.filter((e) => e.kind === k).length);
-        g.children = all.filter((e) => e.kind === k).map(entryItem);
-        return g;
-      });
-    },
-  };
-
-  function entryItem(e) {
-    const flat = (e.title || e.text.split(/\r?\n/).find((l) => l.trim()) || '').trim();
-    const item = new vscode.TreeItem(
-      flat.length > 90 ? flat.slice(0, 89) + '…' : flat,
-      vscode.TreeItemCollapsibleState.None,
-    );
-    item.entryId = e.id;
-    item.contextValue = 'padEntry';
-    item.description = store.relative(e.ts) + (e.tags && e.tags.length ? '  #' + e.tags.join(' #') : '');
-    item.tooltip = new vscode.MarkdownString().appendCodeblock(e.text.slice(0, 2000), 'text');
-    item.command = { command: 'scratchpad.copy', title: 'Copy', arguments: [e.id] };
-    return item;
+    fs.watchFile(watched, { interval: 1000 }, push);
   }
 
   async function fillPlaceholders(e) {
@@ -67,94 +36,138 @@ function activate(ctx) {
     for (const n of names) {
       const v = await vscode.window.showInputBox({
         title: `Fill <${n}>`,
-        prompt: 'Enter to fill, Esc to leave it as <' + n + '>',
+        prompt: `Enter to fill, Esc to leave it as <${n}>`,
       });
       if (v !== undefined && v !== '') text = text.split(`<${n}>`).join(v);
     }
     return text;
   }
 
-  async function copyText(text, e) {
-    await vscode.env.clipboard.writeText(text);
-    vscode.window.setStatusBarMessage(`$(check) Copied ${e.kind}`, 2500);
-  }
-
-  async function pickKind(text) {
-    const guess = store.detectKind(text);
-    const order = [guess, ...store.KINDS.filter((k) => k !== guess)];
-    const pick = await vscode.window.showQuickPick(
-      order.map((k) => ({ label: k, description: k === guess ? 'detected' : '', k })),
-      { title: 'Add as', placeHolder: text.split(/\r?\n/)[0].slice(0, 80) },
-    );
-    return pick && pick.k;
-  }
-
-  async function addText(text) {
+  function addText(text, kind) {
     if (!text || !text.trim()) {
       vscode.window.showWarningMessage('Scratchpad: nothing to add.');
-      return;
+      return null;
     }
-    const kind = await pickKind(text);
-    if (!kind) return;
-    store.add(getFile(), { text, kind });
-    refresh();
-    vscode.window.setStatusBarMessage(`$(check) Added ${kind}`, 2500);
+    const e = store.add(getFile(), { text, kind });
+    push();
+    vscode.window.setStatusBarMessage(`$(check) Added ${e.kind}`, 2500);
+    return e;
   }
 
-  const fwd = (p) => p.replace(/\\/g, '/');
-  const reg = (id, fn) => ctx.subscriptions.push(vscode.commands.registerCommand(id, fn));
+  async function openEntry(e) {
+    if (e.kind === 'path' && !e.text.includes('\n')) {
+      const p = e.text.trim().replace(/^~(?=[\\/])/, os.homedir());
+      let st;
+      try { st = fs.statSync(p); } catch (_) {
+        vscode.window.showWarningMessage('Scratchpad: path not found: ' + p);
+        return;
+      }
+      if (st.isDirectory()) await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(p));
+      else await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(p));
+      return;
+    }
+    const m = URL_RE.exec(e.text);
+    if (m) await vscode.env.openExternal(vscode.Uri.parse(m[0].replace(/[.,;:]+$/, '')));
+  }
 
-  reg('scratchpad.copy', async (arg) => {
-    const e = byId(idOf(arg));
-    if (e) await copyText(await fillPlaceholders(e), e);
-  });
-  reg('scratchpad.copyRaw', async (arg) => {
-    const e = byId(idOf(arg));
-    if (e) await copyText(e.text, e);
-  });
-  reg('scratchpad.addFromClipboard', async () => addText(await vscode.env.clipboard.readText()));
-  reg('scratchpad.addFromSelection', async () => {
+  async function onMessage(m) {
+    const file = getFile();
+    const post = (x) => view && view.webview.postMessage(x);
+    switch (m.type) {
+      case 'ready': push(); break;
+      case 'add': addText(m.text, m.kind); break;
+      case 'copy': {
+        const e = byId(m.id);
+        if (!e) break;
+        await vscode.env.clipboard.writeText(await fillPlaceholders(e));
+        post({ type: 'copied', id: e.id });
+        break;
+      }
+      case 'open': { const e = byId(m.id); if (e) await openEntry(e); break; }
+      case 'pin': {
+        const e = byId(m.id);
+        if (e) { store.edit(file, e.id, { pinned: !e.pinned }); push(); }
+        break;
+      }
+      case 'setKind':
+        if (store.KINDS.includes(m.kind) && byId(m.id)) { store.edit(file, m.id, { kind: m.kind }); push(); }
+        break;
+      case 'edit':
+        if (byId(m.id) && String(m.text).trim()) { store.edit(file, m.id, { text: String(m.text).replace(/\s+$/, '') }); push(); }
+        break;
+      case 'del': {
+        const e = byId(m.id);
+        if (!e) break;
+        deleted.set(e.id, e);
+        store.remove(file, e.id);
+        push();
+        post({ type: 'toast', text: 'Deleted', undoId: e.id });
+        break;
+      }
+      case 'restore': {
+        const e = deleted.get(m.id);
+        if (e) { store.restore(file, e); deleted.delete(m.id); push(); }
+        break;
+      }
+      default: break;
+    }
+  }
+
+  const provider = {
+    resolveWebviewView(v) {
+      view = v;
+      const media = vscode.Uri.joinPath(ctx.extensionUri, 'media');
+      v.webview.options = { enableScripts: true, localResourceRoots: [media] };
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const uri = (f) => v.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
+      v.webview.html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${v.webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="${uri('panel.css')}">
+<title>Scratchpad</title></head>
+<body>
+<div class="add">
+  <textarea id="add-text" rows="1" placeholder="Paste or type, Enter to add" aria-label="New note"></textarea>
+  <div class="add-row">
+    <span class="hint">Shift+Enter for a new line</span>
+    <select id="add-kind" aria-label="Type"><option value="auto">Auto</option><option value="prompt">Prompt</option><option value="url">URL</option><option value="path">Path</option><option value="note">Note</option></select>
+    <button class="btn" id="add-btn">Add</button>
+  </div>
+</div>
+<input class="search" id="search" type="search" placeholder="Search notes" aria-label="Search notes">
+<div class="chips" id="chips"></div>
+<div id="list"></div>
+<div class="toast" id="toast" hidden></div>
+<script nonce="${nonce}" src="${uri('panel.js')}"></script>
+</body></html>`;
+      v.webview.onDidReceiveMessage(onMessage);
+      v.onDidChangeVisibility(() => { if (v.visible) push(); });
+      v.onDidDispose(() => { view = null; });
+    },
+  };
+
+  const reg = (id, fn) => ctx.subscriptions.push(vscode.commands.registerCommand(id, fn));
+  reg('scratchpad.addFromClipboard', async () => { addText(await vscode.env.clipboard.readText()); });
+  reg('scratchpad.addFromSelection', () => {
     const ed = vscode.window.activeTextEditor;
-    if (ed) await addText(ed.document.getText(ed.selection));
+    if (ed) addText(ed.document.getText(ed.selection));
   });
-  reg('scratchpad.addNote', async () => {
-    const v = await vscode.window.showInputBox({ title: 'Add to Scratchpad', prompt: 'One line. For multi-line text, copy it and use "Add from Clipboard".' });
-    if (v !== undefined) await addText(v);
-  });
-  reg('scratchpad.addPath', async (uri, uris) => {
-    const list = (uris && uris.length ? uris : uri ? [uri] : [])
-      .map((u) => fwd(u.fsPath));
+  reg('scratchpad.addPath', (uri, uris) => {
+    const list = (uris && uris.length ? uris : uri ? [uri] : []).map((u) => fwd(u.fsPath));
     if (!list.length && vscode.window.activeTextEditor) list.push(fwd(vscode.window.activeTextEditor.document.uri.fsPath));
-    if (!list.length) return;
-    store.add(getFile(), { text: list.join('\n'), kind: 'path' });
-    refresh();
-    vscode.window.setStatusBarMessage(`$(check) Added ${list.length} path${list.length > 1 ? 's' : ''}`, 2500);
+    if (list.length) addText(list.join('\n'), 'path');
   });
-  reg('scratchpad.delete', async (arg) => {
-    const e = byId(idOf(arg));
-    if (!e) return;
-    store.remove(getFile(), e.id);
-    refresh();
-    const undo = await vscode.window.showInformationMessage('Scratchpad: deleted.', 'Undo');
-    if (undo) { store.restore(getFile(), e); refresh(); }
-  });
-  reg('scratchpad.filter', async () => {
-    const v = await vscode.window.showInputBox({ title: 'Filter Scratchpad', value: filter, prompt: 'Matches text, title and tags' });
-    if (v !== undefined) { filter = v.trim(); refresh(); }
-  });
-  reg('scratchpad.clearFilter', () => { filter = ''; refresh(); });
-  reg('scratchpad.refresh', refresh);
   reg('scratchpad.openFile', () => vscode.window.showTextDocument(vscode.Uri.file(getFile())));
 
   ctx.subscriptions.push(
-    vscode.window.createTreeView('scratchpad.list', { treeDataProvider: provider }),
+    vscode.window.registerWebviewViewProvider('scratchpad.list', provider, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.workspace.onDidChangeConfiguration((ev) => {
-      if (ev.affectsConfiguration('scratchpad')) { watch(); refresh(); }
+      if (ev.affectsConfiguration('scratchpad')) { watch(); push(); }
     }),
     { dispose: () => { if (watched) fs.unwatchFile(watched); } },
   );
   watch();
-  refresh();
 }
 
 function deactivate() {}

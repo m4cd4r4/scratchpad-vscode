@@ -23,6 +23,8 @@ function detectKind(text) {
   if (/^https?:\/\/\S+$/i.test(t)) return 'url';
   const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length && lines.every(isPathLine)) return 'path';
+  // Placeholders, multi-line text or a long run of words read as a reusable prompt.
+  if (/<[A-Za-z][\w.-]*>/.test(t) || lines.length > 1 || t.length >= 120) return 'prompt';
   return 'note';
 }
 

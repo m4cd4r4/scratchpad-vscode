@@ -2,70 +2,85 @@
   "name": "scratchpad-vscode",
   "displayName": "Scratchpad",
   "description": "A notepad in the sidebar for prompts, URLs and file paths. Click to copy. Claude can add to it and query it by date.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "m4cd4r4",
   "license": "MIT",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "main": "./src/extension.js",
-  "bin": { "pad": "./src/cli.js" },
-  "scripts": { "test": "node --test test/store.test.js test/extension.smoke.test.js" },
+  "bin": {
+    "pad": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/store.test.js test/extension.smoke.test.js"
+  },
   "contributes": {
     "viewsContainers": {
-      "activitybar": [{ "id": "scratchpad", "title": "Scratchpad", "icon": "media/pad.svg" }]
+      "activitybar": [
+        {
+          "id": "scratchpad",
+          "title": "Scratchpad",
+          "icon": "media/pad.svg"
+        }
+      ]
     },
     "views": {
-      "scratchpad": [{ "id": "scratchpad.list", "name": "Notes" }]
+      "scratchpad": [
+        {
+          "id": "scratchpad.list",
+          "name": "Notes",
+          "type": "webview"
+        }
+      ]
     },
-    "viewsWelcome": [
+    "commands": [
       {
-        "view": "scratchpad.list",
-        "contents": "No notes yet.\n[Add from Clipboard](command:scratchpad.addFromClipboard)\n[Add a Note](command:scratchpad.addNote)",
-        "when": "!scratchpad.filtered"
+        "command": "scratchpad.addFromClipboard",
+        "title": "Scratchpad: Add from Clipboard",
+        "icon": "$(clippy)"
       },
       {
-        "view": "scratchpad.list",
-        "contents": "Nothing matches the filter.\n[Clear Filter](command:scratchpad.clearFilter)",
-        "when": "scratchpad.filtered"
+        "command": "scratchpad.addFromSelection",
+        "title": "Scratchpad: Add Selection"
+      },
+      {
+        "command": "scratchpad.addPath",
+        "title": "Scratchpad: Add Path"
+      },
+      {
+        "command": "scratchpad.openFile",
+        "title": "Scratchpad: Open Notes File"
       }
     ],
-    "commands": [
-      { "command": "scratchpad.copy", "title": "Scratchpad: Copy", "icon": "$(copy)" },
-      { "command": "scratchpad.copyRaw", "title": "Copy Without Filling Placeholders" },
-      { "command": "scratchpad.delete", "title": "Delete", "icon": "$(trash)" },
-      { "command": "scratchpad.addFromClipboard", "title": "Scratchpad: Add from Clipboard", "icon": "$(clippy)" },
-      { "command": "scratchpad.addFromSelection", "title": "Scratchpad: Add Selection" },
-      { "command": "scratchpad.addNote", "title": "Scratchpad: Add a Note", "icon": "$(add)" },
-      { "command": "scratchpad.addPath", "title": "Scratchpad: Add Path" },
-      { "command": "scratchpad.filter", "title": "Scratchpad: Filter", "icon": "$(search)" },
-      { "command": "scratchpad.clearFilter", "title": "Scratchpad: Clear Filter", "icon": "$(clear-all)" },
-      { "command": "scratchpad.refresh", "title": "Scratchpad: Refresh", "icon": "$(refresh)" },
-      { "command": "scratchpad.openFile", "title": "Scratchpad: Open Notes File" }
-    ],
     "menus": {
-      "commandPalette": [
-        { "command": "scratchpad.copy", "when": "false" },
-        { "command": "scratchpad.copyRaw", "when": "false" },
-        { "command": "scratchpad.delete", "when": "false" }
-      ],
       "view/title": [
-        { "command": "scratchpad.addFromClipboard", "when": "view == scratchpad.list", "group": "navigation@1" },
-        { "command": "scratchpad.addNote", "when": "view == scratchpad.list", "group": "navigation@2" },
-        { "command": "scratchpad.filter", "when": "view == scratchpad.list", "group": "navigation@3" },
-        { "command": "scratchpad.clearFilter", "when": "view == scratchpad.list && scratchpad.filtered", "group": "navigation@4" },
-        { "command": "scratchpad.openFile", "when": "view == scratchpad.list", "group": "9_misc" }
-      ],
-      "view/item/context": [
-        { "command": "scratchpad.copy", "when": "viewItem == padEntry", "group": "inline@1" },
-        { "command": "scratchpad.delete", "when": "viewItem == padEntry", "group": "inline@2" },
-        { "command": "scratchpad.copyRaw", "when": "viewItem == padEntry", "group": "1_copy" },
-        { "command": "scratchpad.delete", "when": "viewItem == padEntry", "group": "9_delete" }
+        {
+          "command": "scratchpad.addFromClipboard",
+          "when": "view == scratchpad.list",
+          "group": "navigation@1"
+        },
+        {
+          "command": "scratchpad.openFile",
+          "when": "view == scratchpad.list",
+          "group": "9_misc"
+        }
       ],
       "explorer/context": [
-        { "command": "scratchpad.addPath", "group": "6_copypath@9" }
+        {
+          "command": "scratchpad.addPath",
+          "group": "6_copypath@9"
+        }
       ],
       "editor/context": [
-        { "command": "scratchpad.addFromSelection", "when": "editorHasSelection", "group": "9_cutcopypaste@9" }
+        {
+          "command": "scratchpad.addFromSelection",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@9"
+        }
       ]
     },
     "configuration": {
