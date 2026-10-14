@@ -128,9 +128,8 @@ function activate(ctx) {
 <title>Scratchpad</title></head>
 <body>
 <div class="add">
-  <textarea id="add-text" rows="1" placeholder="Paste or type, Enter to add" aria-label="New note"></textarea>
+  <textarea id="add-text" rows="1" placeholder="Add a note. Shift+Enter for a new line" aria-label="New note"></textarea>
   <div class="add-row">
-    <span class="hint">Shift+Enter for a new line</span>
     <select id="add-kind" aria-label="Type"><option value="auto">Auto</option><option value="prompt">Prompt</option><option value="url">URL</option><option value="path">Path</option><option value="note">Note</option></select>
     <button class="btn" id="add-btn">Add</button>
   </div>

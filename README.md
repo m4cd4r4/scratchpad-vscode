@@ -17,4 +17,4 @@ Tests: `npm test`.
 
 Copy `claude-skill/pad` to `~/.claude/skills/pad`, replace `<path-to-this-repo>` in it with this repo's path, and Claude can add to and query the same file: "add this to the pad", "list the file paths I added yesterday".
 
-Install the extension from a built package: `npx @vscode/vsce package --no-dependencies`, then `code --install-extension scratchpad-vscode-0.2.0.vsix`.
+Install the extension from a built package: `npx @vscode/vsce package --no-dependencies`, then `code --install-extension scratchpad-vscode-0.2.1.vsix`.

@@ -67,8 +67,13 @@
 
   function renderChips() {
     const wrap = $('chips');
-    wrap.replaceChildren(...CHIPS.map(([k, label]) => {
+    const shown = [];
+    for (const [k, label] of CHIPS) {
       const n = k === 'all' ? entries.length : entries.filter((e) => e.kind === k).length;
+      if (n === 0 && k !== 'all' && ui.kind !== k) continue;
+      shown.push([k, label, n]);
+    }
+    wrap.replaceChildren(...shown.map(([k, label, n]) => {
       return h('button', {
         class: 'chip', 'aria-pressed': String(ui.kind === k),
         onclick: () => { ui.kind = k; persist(); render(); },
@@ -91,7 +96,7 @@
       }));
     }
     if (open) foot.push(h('button', { class: 'link', text: 'Open', onclick: () => post({ type: 'open', id: e.id }) }));
-    return h('article', { class: 'card k-' + e.kind, 'data-id': e.id },
+    return h('article', { class: 'card k-' + e.kind + (e.pinned ? ' pinned' : ''), 'data-id': e.id },
       h('header', {},
         h('button', {
           class: 'badge', text: LABEL[e.kind], title: 'Click to change type',
@@ -185,12 +190,14 @@
     if (!text.trim()) return;
     post({ type: 'add', text, kind: addKind.value === 'auto' ? undefined : addKind.value });
     addBox.value = '';
+    addKind.value = 'auto';
     grow();
   }
 
   function grow() {
     addBox.style.height = 'auto';
     addBox.style.height = Math.min(addBox.scrollHeight, 160) + 'px';
+    addBox.style.overflowY = addBox.scrollHeight > 160 ? 'auto' : 'hidden';
   }
 
   addBox.addEventListener('input', grow);

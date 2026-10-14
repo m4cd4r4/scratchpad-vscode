@@ -2,7 +2,8 @@
   "name": "scratchpad-vscode",
   "displayName": "Scratchpad",
   "description": "A notepad in the sidebar for prompts, URLs and file paths. Click to copy. Claude can add to it and query it by date.",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "icon": "media/icon.png",
   "publisher": "m4cd4r4",
   "license": "MIT",
   "engines": {
